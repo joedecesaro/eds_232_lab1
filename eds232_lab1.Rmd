@@ -45,6 +45,7 @@ df <- res$gbif$data[[1]]
 nrow(df)
 ```
 
+
 ### convert to points of observation from lon/lat columns in data frame
 ```{r}
 obs <- df %>% 
@@ -52,7 +53,7 @@ obs <- df %>%
     coords = c("longitude", "latitude"),
     crs = st_crs(4326))
 
-readr::write_csv(df, obs_csv)
+readr::write_csv(df, obs_csv) 
 #sf::write_sf(obs, obs_geo)
 geojsonio::geojson_write(obs, obs_geo)
 # show points on map
@@ -63,4 +64,16 @@ mapview::mapview(obs, map.types = "Esri.OceanBasemap")
 13,716
 
 ## Question 2: Do you see any odd observations, like marine species on land or vice versa?
+It looks like there are a few otters in the North Atlantic Ocean which does not make sense for this species. Also, there is one sighting in the Arctic, north of Alaska and one in the middle of Alaska. All of these will be accounted for below.
+
+```{r}
+obs_clean <- obs[-c(1524, 2102, 2526, 6800, 6801, 6802, 6803, 6850, 7337), ] 
+
+obs_clean <- obs_clean %>% 
+  filter(identifier != "urn:catalog:CAS:MAM:28877",
+         identifier != "urn:catalog:CAS:MAM:31813")
+
+mapview::mapview(obs_clean, map.types = "Esri.OceanBasemap")
+
+```
 

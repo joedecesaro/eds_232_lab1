@@ -125,5 +125,31 @@ mapview(
   list(obs_clean, obs_hull))
 ```
 
+```{r}
+# save obs hull
+write_sf(obs_hull, obs_hull_geo)
 
+obs_hull_sp <- sf::as_Spatial(obs_hull)
+
+env_stack <- raster::mask(env_stack, obs_hull_sp) %>% 
+  raster::crop(extent(obs_hull_sp))
+
+mapview(obs) + 
+  mapview(env_stack, hide = T)
+```
+
+
+### 2.4.2 Pseudo-Absence
+```{r}
+absence_geo <- file.path(dir_data, "absence.geojson")
+pts_geo     <- file.path(dir_data, "pts.geojson")
+pts_env_csv <- file.path(dir_data, "pts_env.csv")
+
+# get raster count of observations
+r_obs <- rasterize(
+  sf::as_Spatial(obs_clean), env_stack[[1]], field=1, fun='count')
+
+mapview(obs_clean) + 
+  mapview(r_obs)
+```
 

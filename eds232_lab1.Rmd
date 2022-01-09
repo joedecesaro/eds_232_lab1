@@ -121,52 +121,63 @@ DT::datatable(env_layers)
 
 
 ```{r}
-# choose layers after some inspection and perhaps consulting literature
-env_layers_vec <- c("WC_alt", "WC_bio1", "WC_bio2", "ER_tri", "ER_topoWet")
+# choose layers after some inspection and perhaps consulting literature 
+env_layers_vec <- c("BO_sstmean", "BO_bathymean", "MS_biogeo05_dist_shore_5m", "BO2_carbonphytomean_bdmean", "BO_parmean", "BO_ph")
 
 # get layers
-env_stack <- load_layers(env_layers_vec)
+env_stack <- load_layers(env_layers_vec, rasterstack = FALSE)
 
 # interactive plot layers, hiding all but first (select others)
-mapview(env_stack, hide = T)
+# mapview(env_stack, hide = T) # makes the html too big for Github
+plot(env_stack, nc=2)
 ```
 
 ```{r}
-# obs_hull_geo <- file.path(dir_data, "obs_hull.geojson")
-# 
-# # make convex hull around points of observation
-# obs_hull <- sf::st_convex_hull(st_union(obs_clean))
-# 
-# # show points on map
-# mapview(
-#   list(obs_clean, obs_hull))
+obs_hull_geo  <- file.path(dir_data, "obs_hull.geojson")
+env_stack_grd <- file.path(dir_data, "env_stack.grd")
+
+if (!file.exists(obs_hull_geo) | redo){
+  # make convex hull around points of observation
+  obs_hull <- sf::st_convex_hull(st_union(obs_clean))
+  
+  # save obs hull
+  write_sf(obs_hull, obs_hull_geo)
+}
+obs_hull <- read_sf(obs_hull_geo)
+
+# show points on map
+mapview(
+  list(obs_clean, obs_hull))
 ```
 
 ```{r}
-# save obs hull
-# write_sf(obs_hull, obs_hull_geo)
-# 
-# obs_hull_sp <- sf::as_Spatial(obs_hull)
-# 
-# env_stack <- raster::mask(env_stack, obs_hull_sp) %>% 
-#   raster::crop(extent(obs_hull_sp))
-# 
+redo = TRUE
+if (!file.exists(env_stack_grd) | redo){
+  obs_hull_sp <- sf::as_Spatial(obs_hull)
+  env_stack <- raster::mask(env_stack, obs_hull_sp) %>% 
+    raster::crop(extent(obs_hull_sp))
+  writeRaster(env_stack, env_stack_grd, overwrite=T)  
+}
+env_stack <- stack(env_stack_grd)
+
+# show map
 # mapview(obs) + 
-#   mapview(env_stack, hide = T)
-# ```
-# 
-# 
-# ### 2.4.2 Pseudo-Absence
-# ```{r}
-# absence_geo <- file.path(dir_data, "absence.geojson")
-# pts_geo     <- file.path(dir_data, "pts.geojson")
-# pts_env_csv <- file.path(dir_data, "pts_env.csv")
-# 
-# # get raster count of observations
-# r_obs <- rasterize(
-#   sf::as_Spatial(obs_clean), env_stack[[1]], field=1, fun='count')
-# 
-# mapview(obs_clean) + 
-#   mapview(r_obs)
+#   mapview(env_stack, hide = T) # makes html too big for Github
+plot(env_stack, nc=2)
+```
+
+
+### 2.4.2 Pseudo-Absence
+```{r}
+absence_geo <- file.path(dir_data, "absence.geojson")
+pts_geo     <- file.path(dir_data, "pts.geojson")
+pts_env_csv <- file.path(dir_data, "pts_env.csv")
+
+# get raster count of observations
+r_obs <- rasterize(
+  sf::as_Spatial(obs_clean), env_stack[[1]], field=1, fun='count')
+
+mapview(obs_clean) +
+  mapview(r_obs)
 ```
 

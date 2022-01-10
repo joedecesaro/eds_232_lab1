@@ -111,14 +111,23 @@ DT::datatable(env_layers)
 # choose layers after some inspection and perhaps consulting literature 
 env_layers_vec <- c("BO_sstmean", "BO_bathymean", "MS_biogeo05_dist_shore_5m", "BO2_carbonphytomean_bdmean", "BO_parmean", "BO_ph")
 
+# confirm all layers exist
+all(env_layers_vec %in% env_layers$layer_code)
+
+zips <- list.files(dir_env, "zip$", full.names=T)
+zips <- list.files(dir_env, "zip$", full.names=T)
+sapply(zips, unzip, exdir=dir_env)
+
 # get layers
-env_stack <- load_layers(env_layers_vec, rasterstack = FALSE)
+env_stack <- load_layers(env_layers_vec, rasterstack = FALSE) %>% stack()
+
+# rotate and shift crs to be from -180,180
+env_stack <- shift(rotate(shift(env_stack, 180)), 180)
 
 # interactive plot layers, hiding all but first (select others)
 # mapview(env_stack, hide = T) # makes the html too big for Github
 plot(env_stack, nc=2)
 ```
-**The above line `plot(env_stack, nc=2)` does not work, getting an error of "Error in xy.coords(x, y, xlabel, ylabel, log) : 'x' is a list, but does not have components 'x' and 'y'"** 
 
 ### 2.4.2 Pseudo-Absence
 ```{r make absence pts}
@@ -155,8 +164,7 @@ mapview(obs, col.regions = "green") +
 
 
 ```{r make absence pts}
-### Code breaks here
-redo <- TRUE
+redo <- FALSE
 if (!file.exists(pts_env_csv) | redo){
 
   # combine presence and absence into single set of labeled points 

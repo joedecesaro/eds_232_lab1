@@ -1,5 +1,5 @@
 ---
-title: "EDS232_lab1"
+title: "lab1a_sea_otter"
 author: "Joe DeCesaro"
 date: "1/3/2022"
 output: html_document

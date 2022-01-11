@@ -109,11 +109,12 @@ With a generalized additive model we can add "wiggle" to the relationship betwee
 
 ```{r fit gam}
 librarian::shelf(mgcv)
+c("BO_sstmean", "BO_bathymean", "MS_biogeo05_dist_shore_5m", "BO2_carbonphytomean_bdmean", "BO_parmean", "BO_ph")
 
 # fit a generalized additive model with smooth predictors
 mdl <- mgcv::gam(
-  formula = present ~ s(WC_alt) + s(WC_bio1) + 
-    s(WC_bio2) + s(ER_tri) + s(ER_topoWet) + s(lon) + s(lat), 
+  formula = present ~ s(BO_sstmean) + s(BO_bathymean) + 
+    s(MS_biogeo05_dist_shore_5m) + s(BO2_carbonphytomean_bdmean) + s(BO_parmean) + s(BO_ph) + s(lon) + s(lat), 
   family = binomial, data = d)
 summary(mdl)
 

@@ -1,7 +1,8 @@
 ---
-title: 'Lab 1b. Species Distribution Modeling - Logistic Regression'
-editor_options: 
-  chunk_output_type: console
+title: 'Lab 1b. Species Distribution Modeling'
+author: "Joe DeCesaro"
+date: "1/3/2022"
+output: html_document
 ---
 
 ```{r setup, include=F}
@@ -19,8 +20,6 @@ knitr::opts_chunk$set(echo = T)
   - **Maxent** (Maximum Entropy) is a presence-only modeling technique that allows for a more complex set of shapes between predictor and response.
 
 # Explore (cont'd)
-
-Let's load R packages and data from previous [Explore](https://bbest.github.io/eds232-ml/lab1_sdm-explore.html) session last time for your species.
 
 ```{r load pkgs data}
 librarian::shelf(
@@ -46,7 +45,6 @@ GGally::ggpairs(
 ```
 
 # Logistic Regression
-
 We'll work up to the modeling workflow using multiple regression methods along the way.
 
 ```{r fig.cap="Full model workflow with split, fit, predict and evaluate process steps.", echo=F}
@@ -55,7 +53,6 @@ knitr::include_graphics("https://docs.google.com/drawings/d/e/2PACX-1vSab7DR3sDS
 ```
 
 ## Setup Data
-
 Let's setup a data frame with only the data we want to model by:
 
 - Dropping rows with any NAs. Later we'll learn how to ["impute"](https://bbest.github.io/eds232-ml/glossary.html#imputation) values with guesses so as to not throw away data.
@@ -70,14 +67,12 @@ nrow(d)
 ```
 
 ## Linear Model
-
 Let's start as simply as possible with a linear model `lm()` on multiple predictors `X` to predict presence `y` using a simpler workflow.
 
 ```{r fig.cap="Simpler workflow with only fit and predict of all data, i.e. no splitting.", echo=F}
 # [model-workflow_fit-all-predict-all - Google Drawings](https://docs.google.com/drawings/d/1JtWF-4dltWR0hSAZBGaqQdLShReLVjLhKZG8iRpVY2A/edit)
 knitr::include_graphics("https://docs.google.com/drawings/d/e/2PACX-1vRRvQdrDELT9QRPJxj8ooPvABgjQ-qqjzC0Ri9Hhv6n1O7N31eb4o6c7ZhZd6QtQ7XgZybNhUBESK9L/pub?w=572&h=170")
 ```
-
 
 ```{r fit lm}
 # fit a linear model
@@ -100,7 +95,7 @@ To solve this problem of constraining the response term to being between the two
 $$
 logit(p_i) = \log_{e}\left( \frac{p_i}{1-p_i} \right)
 $$
-We can expand the expansion of the predicted term, i.e. the probability $p$ of being either $y$, with all possible predictors $X$ whereby each coeefficient $b$ gets multiplied by the value of $x$:
+We can expand the expansion of the predicted term, i.e. the probability $p$ of being either $y$, with all possible predictors $X$ whereby each coefficient $b$ gets multiplied by the value of $x$:
 
 $$
 \log_{e}\left( \frac{p_i}{1-p_i} \right) = b_0 + b_1 x_{1,i} + b_2 x_{2,i} + \cdots + b_k x_{k,i}
@@ -133,7 +128,7 @@ librarian::shelf(mgcv)
 # fit a generalized additive model with smooth predictors
 mdl <- mgcv::gam(
   formula = present ~ s(WC_alt) + s(WC_bio1) + 
-    s(WC_bio2) + s(ER_tri) + s(ER_topoWet) + s(lon) + s(lat), 
+    s(WC_bio2) + s(WC_bio4) + s(WC_tmean1) + s(ER_tri) + s(ER_topoWet) + s(lon) + s(lat), 
   family = binomial, data = d)
 summary(mdl)
 
@@ -141,6 +136,7 @@ summary(mdl)
 plot(mdl, scale=0)
 ```
 
+**This whole section is breaking for various reasons**
 ```{r gam-todo, eval=F, echo=F}
 # TODO: model selection ?mgcv::gam
 AIC(b0,bt) ## interaction worse than additive
@@ -161,7 +157,7 @@ pred <- predict.gam(mdl, newd)
 
 Maxent is probably the most commonly used species distribution model ([Elith 2011](http://dx.doi.org/10.1111/j.1472-4642.2010.00725.x)) since it performs well with few input data points, only requires presence points (and samples background for comparison) and is easy to use with a Java graphical user interface (GUI).
 
-```{r fit maxent}
+```{r fit maxent, echo=TRUE}
 # load extra packages
 librarian::shelf(
   maptools, sf)

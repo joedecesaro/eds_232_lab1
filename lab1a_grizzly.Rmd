@@ -1,5 +1,5 @@
 ---
-title: 'Lab 1a. Species Distribution Modeling - Exploratory Data Analysis'
+title: 'Lab 1a. Species Distribution Modeling'
 author: "Joe DeCesaro"
 date: "1/3/2022"
 output: html_document

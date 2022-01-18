@@ -82,7 +82,7 @@ mapview::mapview(obs, map.types = "Esri.WorldTopoMap")
 ```
 
 - **Question 1**. How many observations total are in GBIF for your species? (Hint: `?occ`)
-`r nrow(obs)`
+1,634
 
 - **Question 2**.  Do you see any odd observations, like marine species on land or vice versa? If so, please see the [Data Cleaning](
 https://rspatial.org/raster/sdm/2_sdm_occdata.html#data-cleaning) and explain what you did to fix or remove these points.

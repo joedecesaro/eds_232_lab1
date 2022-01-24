@@ -82,7 +82,10 @@ pairs(env_stack)
 ```{r}
 # calculate variance inflation factor per predictor, a metric of multicollinearity between variables
 vif(env_stack)
+```
 
+
+```{r}
 # stepwise reduce predictors, based on a max correlation of 0.7 (max 1)
 v <- vifcor(env_stack, th=0.7) 
 v
@@ -104,13 +107,22 @@ if (!file.exists(mdl_maxv_rds)){
   readr::write_rds(mdl_maxv, mdl_maxv_rds)
 }
 mdl_maxv <- read_rds(mdl_maxv_rds)
+```
 
+
+```{r}
 # plot variable contributions per predictor
 plot(mdl_maxv)
+```
 
+
+```{r}
 # plot term plots
 response(mdl_maxv)
+```
 
+
+```{r}
 # predict
 y_maxv <- predict(env_stack, mdl_maxv) #, ext=ext, progress='')
 

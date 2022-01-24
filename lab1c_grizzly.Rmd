@@ -9,20 +9,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Learning Objectives {.unnumbered}
-
-There are two broad categories of Supervised Classification based on the type of response your modeling $y \sim x$, where $y$ is either a continuous value, in which case **Regression**, or it is a categorical value, in which case it's a **Classification**.
-
-A **binary** response, such as presence or absence, is a categorical value, so typically a Classification technique would be used. However, by transforming the response with a logit function, we were able to use Regression techniques like generalized linear (`glm()`) and generalized additive (`gam()`) models.
-
-In this portion of the lab you'll use **Decision Trees** as a **Classification** technique to the data with the response being categorical (`factor(present)`).
-
--   **Recursive Partitioning** (`rpart()`)\
-    Originally called classification & regression trees (CART), but that's copyrighted (Breiman, 1984).
-
--   **Random Forest** (`RandomForest()`)\
-    Actually an ensemble model, ie trees of trees.
-
 # Setup
 
 ```{r setup}
@@ -42,7 +28,10 @@ librarian::shelf(
   rsample,     # d: split train/test data
   skimr,       # d: skim summarize data table
   vip)         # X: variable importance
+```
 
+
+```{r setup}
 # options
 options(
   scipen = 999,
@@ -79,8 +68,6 @@ table(d_train$present)
 ```
 
 # Decision Trees
-
-Reading: Boehmke & Greenwell (2020) Hands-On Machine Learning with R. [Chapter 9 Decision Trees](https://bradleyboehmke.github.io/HOML/DT.html)
 
 ## Partition, depth=1
 ```{r rpart-stump, echo=TRUE, fig.width=4, fig.height=3, fig.show='hold', fig.cap="Decision tree illustrating the single split on feature x (left).", out.width="48%"}
@@ -130,11 +117,11 @@ ggplot(mdl_caret)
 vip(mdl_caret, num_features = 40, bar = FALSE)
 ```
 
-```{r dt-pdp, fig.width=10, fig.height= 3.5, fig.cap="Partial dependence plots to understand the relationship between lat, WC_bio2 and present."}
+```{r dt-pdp, fig.width=10, fig.height= 3.5, fig.cap="Partial dependence plots to understand the relationship between lat, WC_alt and present."}
 # Construct partial dependence plots
 p1 <- partial(mdl_caret, pred.var = "lat") %>% autoplot()
-p2 <- partial(mdl_caret, pred.var = "WC_bio2") %>% autoplot()
-p3 <- partial(mdl_caret, pred.var = c("lat", "WC_bio2")) %>% 
+p2 <- partial(mdl_caret, pred.var = "WC_alt") %>% autoplot()
+p3 <- partial(mdl_caret, pred.var = c("lat", "WC_alt")) %>% 
   plotPartial(levelplot = FALSE, zlab = "yhat", drape = TRUE, 
               colorkey = TRUE, screen = list(z = -20, x = -60))
 

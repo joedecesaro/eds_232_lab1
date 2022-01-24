@@ -9,16 +9,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Learning Objectives {-}
-
-- **Exploratory Data Analysis** (cont'd): 
-  - Pairs plot to show correlation between variables and avoid **multicollinearity** (see [8.2 Many predictors in a model](https://openintro-ims.netlify.app/model-mlr.html#many-predictors-in-a-model))
-- **Logistic Regression** seen as an evolution of techniques
-  - **Linear Model** to show simplest multivariate regression, but predictions can be outside the binary values.
-  - **Generalized Linear Model** uses a logit transformation to constrain the outputs to being within two values.
-  - **Generalized Additive Model** allows for "wiggle" in predictor terms.
-  - **Maxent** (Maximum Entropy) is a presence-only modeling technique that allows for a more complex set of shapes between predictor and response.
-
 # Explore (cont'd)
 
 ```{r load pkgs data}
@@ -45,18 +35,9 @@ GGally::ggpairs(
 ```
 
 # Logistic Regression
-We'll work up to the modeling workflow using multiple regression methods along the way.
-
-```{r fig.cap="Full model workflow with split, fit, predict and evaluate process steps.", echo=F}
-# [model-workflow - Google Drawings](https://docs.google.com/drawings/d/1bnevzcNpkRtopo3jagpwBy0IyNN-uh_mVJXvQg4WRtU/edit)
-knitr::include_graphics("https://docs.google.com/drawings/d/e/2PACX-1vSab7DR3sDS1aoRWNDCfb8NUDE5a1P701NIZrb5zb5ss3RAhvfLJxuRLhHpJpKAW8krtGRkwm-jKa1Y/pub?w=932&h=344")
-```
 
 ## Setup Data
 Let's setup a data frame with only the data we want to model by:
-
-- Dropping rows with any NAs. Later we'll learn how to ["impute"](https://bbest.github.io/eds232-ml/glossary.html#imputation) values with guesses so as to not throw away data.
-- Removing terms we don't want to model. We can then use a simplified formula $present \sim .$ to predict $present$ based on all other fields in the data frame (i.e. the $X$`s in $y \sim x_1 + x_2 + ... x_n$).
 
 ```{r setup d}
 # setup model data
@@ -69,16 +50,14 @@ nrow(d)
 ## Linear Model
 Let's start as simply as possible with a linear model `lm()` on multiple predictors `X` to predict presence `y` using a simpler workflow.
 
-```{r fig.cap="Simpler workflow with only fit and predict of all data, i.e. no splitting.", echo=F}
-# [model-workflow_fit-all-predict-all - Google Drawings](https://docs.google.com/drawings/d/1JtWF-4dltWR0hSAZBGaqQdLShReLVjLhKZG8iRpVY2A/edit)
-knitr::include_graphics("https://docs.google.com/drawings/d/e/2PACX-1vRRvQdrDELT9QRPJxj8ooPvABgjQ-qqjzC0Ri9Hhv6n1O7N31eb4o6c7ZhZd6QtQ7XgZybNhUBESK9L/pub?w=572&h=170")
-```
-
 ```{r fit lm}
 # fit a linear model
 mdl <- lm(present ~ ., data = d)
 summary(mdl)
+```
 
+
+```{r fit lm}
 y_predict <- predict(mdl, d, type="response")
 y_true    <- d$present
 
@@ -105,7 +84,10 @@ $$
 # fit a generalized linear model with a binomial logit link function
 mdl <- glm(present ~ ., family = binomial(link="logit"), data = d)
 summary(mdl)
+```
 
+
+```{r fit glm}
 y_predict <- predict(mdl, d, type="response")
 
 range(y_predict)
@@ -131,7 +113,10 @@ mdl <- mgcv::gam(
     s(WC_bio2) + s(WC_bio4) + s(WC_tmean1) + s(ER_tri) + s(ER_topoWet) + s(lon) + s(lat), 
   family = binomial, data = d)
 summary(mdl)
+```
 
+
+```{r fit gam}
 # show term plots
 plot(mdl, scale=0)
 ```
@@ -150,7 +135,10 @@ mdl_maxent_rds <- file.path(dir_data, "mdl_maxent.rds")
 # show version of maxent
 if (!interactive())
   maxent()
+```
 
+
+```{r fit maxent, echo=TRUE}
 # get environmental rasters
 # NOTE: the first part of Lab 1. SDM - Explore got updated to write this clipped environmental raster stack
 env_stack_grd <- file.path(dir_data, "env_stack.grd")
@@ -197,6 +185,3 @@ data(wrld_simpl, package="maptools")
 plot(wrld_simpl, add=TRUE, border='dark grey')
 ```
 
-Notice how the `plot()` function produces different outputs depending on the class of the input object. You can view help for each of these with R Console commands: `?plot.lm`, `?plot.gam` and <code  class="r">`plot,DistModel,numeric-method`</code>.
-
-Next time we'll split the data into test and train data and **evaluate** model performance while learning about tree-based methods.

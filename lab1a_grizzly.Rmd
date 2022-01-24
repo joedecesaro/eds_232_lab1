@@ -9,15 +9,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Learning Objectives {-}
-
-- Explore
-  - Fetch species observations from the Global Biodiversity Information Facility (GBIF.org) using an R package that wraps a function around their API.
-  - Fetch environmental data for defining environmental relationship in the species distribution model (SDM).
-  - Generate pseudo-absences, or background, points with which to differentiate from the species presence points in the SDM.
-  - Extract underlying environmental data from points.
-  - Plot term plots of each environmental predictor with the species response.
-
 # Overview
 
 This lab will introduce you to machine learning by predicting presence of a species of you choosing from observations and environmental data. We will largely follow guidance found at [Species distribution modeling | R Spatial ](https://rspatial.org/raster/sdm/) using slightly newer R packages and functions.
@@ -87,7 +78,7 @@ mapview::mapview(obs, map.types = "Esri.WorldTopoMap")
 - **Question 2**.  Do you see any odd observations, like marine species on land or vice versa? If so, please see the [Data Cleaning](
 https://rspatial.org/raster/sdm/2_sdm_occdata.html#data-cleaning) and explain what you did to fix or remove these points.
 
-No odd observations are glaring in the initial map.
+No odd observations are glaring in the initial map. There are some sightings in lower latitudes but this is in line with historic areas of their habitat so they could have just followed the Rockies.
 
 ## Get Environmental Data
 
@@ -155,7 +146,10 @@ obs_hull <- read_sf(obs_hull_geo)
 # show points on map
 mapview(
   list(obs, obs_hull))
+```
 
+
+```{r clip env_raster}
 if (!file.exists(env_stack_grd) | redo){
   obs_hull_sp <- sf::as_Spatial(obs_hull)
   env_stack <- raster::mask(env_stack, obs_hull_sp) %>% 

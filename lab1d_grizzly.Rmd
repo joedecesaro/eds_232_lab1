@@ -114,7 +114,13 @@ mdl_maxv <- read_rds(mdl_maxv_rds)
 # plot variable contributions per predictor
 plot(mdl_maxv)
 ```
+**Question**: Which variables were removed due to multicollinearity and what is the rank of most to least important remaining variables in your model?
 
+WC_bio1, WC_tmean1, and ER_tri were removed for multicollinearity. Rankings of remaining variables are below.
+- ER_topoWet
+- WC_bio4
+- WC_alt
+- WC_bio2
 
 ```{r}
 # plot term plots
@@ -152,13 +158,17 @@ e <- dismo::evaluate(
   model = mdl_maxv,
   x     = env_stack)
 e
+```
 
+
+```{r}
 plot(e, 'ROC')
 
 thr <- threshold(e)[['spec_sens']]
 thr
-p_true <- na.omit(extract(y_maxv, pts_test_p) >= thr)
-a_true <- na.omit(extract(y_maxv, pts_test_a) < thr)
+
+p_true <- na.omit(raster::extract(y_maxv, pts_test_p) >= thr)
+a_true <- na.omit(raster::extract(y_maxv, pts_test_a) < thr)
 
 # (t)rue/(f)alse (p)ositive/(n)egative rates
 tpr <- sum(p_true)/length(p_true)

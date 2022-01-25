@@ -97,6 +97,8 @@ plotcp(mdl)
 # rpart cross validation results
 mdl$cptable
 ```
+**Question**: Based on the complexity plot threshold, what size of tree is recommended?
+I believe it is recommending a tree of size 5.
 
 ## Feature interpretation
 
@@ -116,6 +118,8 @@ ggplot(mdl_caret)
 ```{r dt-vip, fig.height=5.5, fig.cap="Variable importance based on the total reduction in MSE for the Ames Housing decision tree."}
 vip(mdl_caret, num_features = 40, bar = FALSE)
 ```
+**Question**: what are the top 3 most important variables of your model?
+Latitude, WC_alt, and longitude
 
 ```{r dt-pdp, fig.width=10, fig.height= 3.5, fig.cap="Partial dependence plots to understand the relationship between lat, WC_alt and present."}
 # Construct partial dependence plots
@@ -164,4 +168,4 @@ p2 <- vip::vip(mdl_permutation, bar = FALSE)
 
 gridExtra::grid.arrange(p1, p2, nrow = 1)
 ```
-
+**Question**: How might variable importance differ between rpart and RandomForest in your model outputs?

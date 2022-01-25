@@ -120,6 +120,17 @@ summary(mdl)
 # show term plots
 plot(mdl, scale=0)
 ```
+- **Question**: Which GAM environmental variables, and even range of values, seem to contribute most towards presence (above 0 response) versus absence (below 0 response)?
+  - Presence:
+    - "WC_tmean1" (Mean temperature (January)): Possibly for >0 degrees but it seems to have a wide variance (dotted lines are not close)
+    - Longitude: Possibly from -150 > -120 but it does not seem strong
+    - "WC_bio4" (Temperature seasonality): Possibly between 70-110
+  - Absence:
+    - "WC_bio1" (Annual mean temperature): >10 degrees
+    - "WC_bio4" (Temperature seasonality): <70 and >110 
+    - Longitude: Possibly from < -150 but it does not seem strong
+
+  Overall it seems like there are more variables that are better predictors for absence rather than presence but that could just be from my inexperience to read these charts.
 
 ## Maxent (Maximum Entropy)
 
@@ -174,7 +185,12 @@ plot(mdl)
 # plot term plots
 response(mdl)
 ```
-
+- **Question**: Which Maxent environmental variables, and even range of values, seem to contribute most towards presence (closer to 1 response) and how might this differ from the GAM results?
+  - "WC_bio1": Temps < -5 degrees
+  - "WC_tmean1": Temps > 10 degrees
+  - "ER_tri": Values > 300
+  - "ER_topoWet": Values < 0
+  The Maxent environmental variables add WC_bio1, ER_tri, and ER_topoWet to presence compared to the GAM results and takes away the WC_bio4.
 
 ```{r fit maxent, echo=TRUE}
 # predict

@@ -72,13 +72,25 @@ nrow(obs) # number of rows
 mapview::mapview(obs, map.types = "Esri.WorldTopoMap")
 ```
 
-- **Question 1**. How many observations total are in GBIF for your species? (Hint: `?occ`)
+- **Question**: How many observations total are in GBIF for your species? (Hint: `?occ`)
 1,634
 
-- **Question 2**.  Do you see any odd observations, like marine species on land or vice versa? If so, please see the [Data Cleaning](
-https://rspatial.org/raster/sdm/2_sdm_occdata.html#data-cleaning) and explain what you did to fix or remove these points.
+- **Question**:  Do you see any odd observations, like marine species on land or vice versa? If so, please see the [Data Cleaning](https://rspatial.org/raster/sdm/2_sdm_occdata.html#data-cleaning) and explain what you did to fix or remove these points.
 
 No odd observations are glaring in the initial map. There are some sightings in lower latitudes but this is in line with historic areas of their habitat so they could have just followed the Rockies.
+
+- **Question**: What environmental layers did you choose as predictors? Can you find any support for these in the literature?
+  - "WC_alt" (altitude): Grizzly bears can be found in mountain ranges and along coastal landscapes.
+  - "WC_bio1" (Annual mean temperature): Grizzly bears are typically found in cooler regions, however with wide seasonal temperature ranges.
+  - "WC_bio2" (Mean diurnal temperature range): Grizzly bears can found in regions that can experience wide temperature swings so I thought this would be interesting. 
+  - "WC_bio4" (Temperature seasonality): The areas where Grizzly bears are found can experience very seasonal temperatures (cold winters and warm summers).
+  - "WC_tmean1" (Mean temperature (January)): Temperatures in these regions are usually cold so I added this as I thought it could be interesting.
+  - "ER_tri" (Terrain roughness index): The paper linked below said this was a good predictor for populations of Grizzlies.
+  - "ER_topoWet" (Topographic wetness): The paper linked below said this was a good predictor for populations of Grizzlies. Also I know that these bears are usually in wetter climates.
+
+I found one paper that gave me some ideas about predictors. It is cited here: 
+Mowat G, Heard DC, Schwarz CJ (2013) Predicting Grizzly Bear Density in Western North America. PLoS ONE 8(12): e82757. https://doi.org/10.1371/journal.pone.0082757
+
 
 ## Get Environmental Data
 

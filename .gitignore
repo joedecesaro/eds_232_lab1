@@ -5,3 +5,7 @@
 
 /data
 /data/sdm
+
+/data/sdm/obs.csv
+/data/sdm/obs.geojson
+

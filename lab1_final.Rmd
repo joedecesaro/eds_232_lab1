@@ -1,0 +1,825 @@
+---
+title: 'Lab 1: Species'
+author: "Joe DeCesaro"
+date: "1/25/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Lab 1a
+
+This lab will introduce you to machine learning by predicting presence of a species of you choosing from observations and environmental data. We will largely follow guidance found at [Species distribution modeling | R Spatial ](https://rspatial.org/raster/sdm/) using slightly newer R packages and functions.
+
+## Explore
+
+This first part of the lab involves fetching data for your species of interest, whether terrestrial or marine.
+
+```{r packages vars}
+# load packages, installing if missing
+if (!require(librarian)){
+  install.packages("librarian")
+  library(librarian)
+}
+librarian::shelf(
+  dismo, dplyr, DT, ggplot2, here, htmltools, leaflet, mapview, purrr, raster, readr, rgbif, rgdal, rJava, sdmpredictors, sf, spocc, tidyr)
+select <- dplyr::select # overwrite raster::select
+options(readr.show_col_types = FALSE)
+
+# set random seed for reproducibility
+set.seed(42)
+
+# directory to store data
+dir_data <- here("data/sdm")
+dir.create(dir_data, showWarnings = F, recursive = T)
+```
+
+### Choose a Species
+Ursus arctos horribilis - Grizzly Bear
+
+![](~/EDS232/eds_232_lab1/01407315.jpg)
+
+### Get Species Observations
+
+```{r get obs}
+obs_csv <- file.path(dir_data, "obs.csv")
+obs_geo <- file.path(dir_data, "obs.geojson")
+redo    <- TRUE
+
+if (!file.exists(obs_geo) | redo){
+  # get species occurrence data from GBIF with coordinates
+  (res <- spocc::occ(
+    query = 'Ursus arctos horribilis', 
+    from = 'gbif', has_coords = T,
+    limit = 10000))
+  
+  # extract data frame from result
+  df <- res$gbif$data[[1]] 
+  readr::write_csv(df, obs_csv)
+  
+  # convert to points of observation from lon/lat columns in data frame
+  obs <- df %>% 
+    sf::st_as_sf(
+      coords = c("longitude", "latitude"),
+      crs = st_crs(4326)) %>% 
+    select(prov, key) # save space (joinable from obs_csv)
+  sf::write_sf(obs, obs_geo, delete_dsn=T)
+}
+obs <- sf::read_sf(obs_geo)
+nrow(obs) # number of rows
+
+# show points on map
+mapview::mapview(obs, map.types = "Esri.WorldTopoMap")
+```
+
+- **Question**: How many observations total are in GBIF for your species? (Hint: `?occ`)
+1,634
+
+- **Question**:  Do you see any odd observations, like marine species on land or vice versa? If so, please see the [Data Cleaning](https://rspatial.org/raster/sdm/2_sdm_occdata.html#data-cleaning) and explain what you did to fix or remove these points.
+
+No odd observations are glaring in the initial map. There are some sightings in lower latitudes but this is in line with historic areas of their habitat so they could have just followed the Rockies.
+
+- **Question**: What environmental layers did you choose as predictors? Can you find any support for these in the literature?
+  - "WC_alt" (altitude): Grizzly bears can be found in mountain ranges and along coastal landscapes.
+  - "WC_bio1" (Annual mean temperature): Grizzly bears are typically found in cooler regions, however with wide seasonal temperature ranges.
+  - "WC_bio2" (Mean diurnal temperature range): Grizzly bears can found in regions that can experience wide temperature swings so I thought this would be interesting. 
+  - "WC_bio4" (Temperature seasonality): The areas where Grizzly bears are found can experience very seasonal temperatures (cold winters and warm summers).
+  - "WC_tmean1" (Mean temperature (January)): Temperatures in these regions are usually cold so I added this as I thought it could be interesting.
+  - "ER_tri" (Terrain roughness index): The paper linked below said this was a good predictor for populations of Grizzlies.
+  - "ER_topoWet" (Topographic wetness): The paper linked below said this was a good predictor for populations of Grizzlies. Also I know that these bears are usually in wetter climates.
+
+I found one paper that gave me some ideas about predictors. It is cited here: 
+Mowat G, Heard DC, Schwarz CJ (2013) Predicting Grizzly Bear Density in Western North America. PLoS ONE 8(12): e82757. https://doi.org/10.1371/journal.pone.0082757
+
+
+### Get Environmental Data
+
+Next, you'll use the Species Distribution Model predictors R package `sdmpredictors` to get underlying environmental data for your observations. First you'll get underlying environmental data for predicting the niche on the species observations. Then you'll generate pseudo-absence points with which to sample the environment. The model will differentiate the environment of the presence points from the pseudo-absence points.
+
+#### Presence
+
+```{r}
+dir_env <- file.path(dir_data, "env")
+
+# set a default data directory
+options(sdmpredictors_datadir = dir_env)
+
+# choosing terrestrial
+env_datasets <- sdmpredictors::list_datasets(terrestrial = TRUE, marine = FALSE)
+```
+
+
+```{r}
+# show table of datasets
+env_datasets %>% 
+  select(dataset_code, description, citation) %>% 
+  DT::datatable()
+
+# choose datasets for a vector
+env_datasets_vec <- c("WorldClim", "ENVIREM")
+```
+
+
+```{r}
+# get layers
+env_layers <- sdmpredictors::list_layers(env_datasets_vec)
+DT::datatable(env_layers)
+```
+
+
+```{r}
+# choose layers after some inspection and perhaps consulting literature
+env_layers_vec <- c("WC_alt", "WC_bio1", "WC_bio2", "WC_bio4", "WC_tmean1", "ER_tri", "ER_topoWet")
+
+# get layers
+env_stack <- load_layers(env_layers_vec)
+
+# interactive plot layers, hiding all but first (select others)
+# mapview(env_stack, hide = T) # makes the html too big for Github
+plot(env_stack, nc=2)
+```
+
+Crop the environmental rasters to a reasonable study area around our species observations.
+
+```{r}
+obs_hull_geo  <- file.path(dir_data, "obs_hull.geojson")
+env_stack_grd <- file.path(dir_data, "env_stack.grd")
+
+if (!file.exists(obs_hull_geo) | redo){
+  # make convex hull around points of observation
+  obs_hull <- sf::st_convex_hull(st_union(obs))
+  
+  # save obs hull
+  write_sf(obs_hull, obs_hull_geo)
+}
+obs_hull <- read_sf(obs_hull_geo)
+
+# show points on map
+mapview(
+  list(obs, obs_hull))
+```
+
+
+```{r}
+if (!file.exists(env_stack_grd) | redo){
+  obs_hull_sp <- sf::as_Spatial(obs_hull)
+  env_stack <- raster::mask(env_stack, obs_hull_sp) %>% 
+    raster::crop(extent(obs_hull_sp))
+  writeRaster(env_stack, env_stack_grd, overwrite=T)  
+}
+env_stack <- stack(env_stack_grd)
+
+# show map
+# mapview(obs) + 
+#   mapview(env_stack, hide = T) # makes html too big for Github
+plot(env_stack, nc=2)
+```
+
+#### Pseudo-Absence
+
+```{r}
+absence_geo <- file.path(dir_data, "absence.geojson")
+pts_geo     <- file.path(dir_data, "pts.geojson")
+pts_env_csv <- file.path(dir_data, "pts_env.csv")
+
+if (!file.exists(absence_geo) | redo){
+  # get raster count of observations
+  r_obs <- rasterize(
+    sf::as_Spatial(obs), env_stack[[1]], field=1, fun='count')
+  
+  # show map
+  # mapview(obs) + 
+  #   mapview(r_obs)
+  
+  # create mask for 
+  r_mask <- mask(env_stack[[1]] > -Inf, r_obs, inverse=T)
+  
+  # generate random points inside mask
+  absence <- dismo::randomPoints(r_mask, nrow(obs)) %>% 
+    as_tibble() %>% 
+    st_as_sf(coords = c("x", "y"), crs = 4326)
+  
+  write_sf(absence, absence_geo, delete_dsn=T)
+}
+absence <- read_sf(absence_geo)
+
+# show map of presence, ie obs, and absence
+mapview(obs, col.regions = "green") + 
+  mapview(absence, col.regions = "gray")
+```
+
+
+```{r}
+
+if (!file.exists(pts_env_csv) | redo){
+
+  # combine presence and absence into single set of labeled points 
+  pts <- rbind(
+    obs %>% 
+      mutate(
+        present = 1) %>% 
+      select(present, key),
+    absence %>% 
+      mutate(
+        present = 0,
+        key     = NA)) %>% 
+    mutate(
+      ID = 1:n()) %>% 
+    relocate(ID)
+  write_sf(pts, pts_geo, delete_dsn=T)
+
+  # extract raster values for points
+  pts_env <- raster::extract(env_stack, as_Spatial(pts), df=TRUE) %>% 
+    tibble() %>% 
+    # join present and geometry columns to raster value results for points
+    left_join(
+      pts %>% 
+        select(ID, present),
+      by = "ID") %>% 
+    relocate(present, .after = ID) %>% 
+    # extract lon, lat as single columns
+    mutate(
+      #present = factor(present),
+      lon = st_coordinates(geometry)[,1],
+      lat = st_coordinates(geometry)[,2]) %>% 
+    select(-geometry)
+  write_csv(pts_env, pts_env_csv)
+}
+pts_env <- read_csv(pts_env_csv)
+
+pts_env %>% 
+  # show first 10 presence, last 10 absence
+  slice(c(1:10, (nrow(pts_env)-9):nrow(pts_env))) %>% 
+  DT::datatable(
+    rownames = F,
+    options = list(
+      dom = "t",
+      pageLength = 20))
+```
+
+In the end this table is the **data** that feeds into our species distribution model (`y ~ X`), where:
+
+- `y` is the `present` column with values of `1` (present) or `0` (absent)
+- `X` is all other columns:  `r paste(setdiff(names(pts_env), c("present", "ID")), collapse = ", ")`
+
+### Term Plots
+
+In the vein of [exploratory data analyses](https://r4ds.had.co.nz/exploratory-data-analysis.html), before going into modeling let's look at the data. Specifically, let's look at how obviously differentiated is the presence versus absence for each predictor -- a more pronounced presence peak should make for a more confident model. A plot for a specific predictor and response is called a "term plot". In this case we'll look for predictors where the presence (present = `1`) occupies a distinct "niche" from the background absence points (present = `0`).
+
+```{r plot terms}
+pts_env %>% 
+  select(-ID) %>% 
+  mutate(
+    present = factor(present)) %>% 
+  pivot_longer(-present) %>% 
+  ggplot() +
+  geom_density(aes(x = value, fill = present)) + 
+  scale_fill_manual(values = alpha(c("gray", "green"), 0.5)) +
+  scale_x_continuous(expand=c(0,0)) +
+  scale_y_continuous(expand=c(0,0)) +
+  theme_bw() + 
+  facet_wrap(~name, scales = "free") +
+  theme(
+    legend.position = c(1, 0),
+    legend.justification = c(1, 0))
+```
+
+# Lab 1b
+
+## Explore (cont'd)
+
+```{r load pkgs data}
+librarian::shelf(
+  DT, dplyr, dismo, GGally, here, readr, tidyr)
+select <- dplyr::select # overwrite raster::select
+options(readr.show_col_types = F)
+
+dir_data    <- here("data/sdm")
+pts_env_csv <- file.path(dir_data, "pts_env.csv")
+
+pts_env <- read_csv(pts_env_csv)
+nrow(pts_env)
+
+datatable(pts_env, rownames = F)
+```
+
+Let's look at a pairs plot (using [GGally::ggpairs()](http://ggobi.github.io/ggally/articles/ggpairs.html)) to show correlations between variables. 
+
+```{r ggpairs, fig.cap="Pairs plot with `present` color coded.", fig.width=11, fig.height=11, eval=T}
+GGally::ggpairs(
+  select(pts_env, -ID),
+  aes(color = factor(present)))
+```
+
+## Logistic Regression
+
+### Setup Data
+Let's setup a data frame with only the data we want to model by:
+
+```{r setup d}
+# setup model data
+d <- pts_env %>% 
+  select(-ID) %>%  # remove terms we don't want to model
+  tidyr::drop_na() # drop the rows with NA values
+nrow(d)
+```
+
+### Linear Model
+Let's start as simply as possible with a linear model `lm()` on multiple predictors `X` to predict presence `y` using a simpler workflow.
+
+```{r}
+# fit a linear model
+mdl <- lm(present ~ ., data = d)
+summary(mdl)
+```
+
+
+```{r}
+y_predict <- predict(mdl, d, type="response")
+y_true    <- d$present
+
+range(y_predict)
+range(y_true)
+```
+
+The problem with these predictions is that it ranges outside the possible values of present `1` and absent `0`. (Later we'll deal with converting values within this range to either `1` or `0` by applying a cutoff value; i.e. any values > 0.5 become 1 and below become 0.)
+
+### Generalized Linear Model
+
+To solve this problem of constraining the response term to being between the two possible values, i.e. the **probability** $p$ of being one or the other possible $y$ values, we'll apply the logistic transformation on the response term.
+
+$$
+logit(p_i) = \log_{e}\left( \frac{p_i}{1-p_i} \right)
+$$
+We can expand the expansion of the predicted term, i.e. the probability $p$ of being either $y$, with all possible predictors $X$ whereby each coefficient $b$ gets multiplied by the value of $x$:
+
+$$
+\log_{e}\left( \frac{p_i}{1-p_i} \right) = b_0 + b_1 x_{1,i} + b_2 x_{2,i} + \cdots + b_k x_{k,i}
+$$
+
+```{r}
+# fit a generalized linear model with a binomial logit link function
+mdl <- glm(present ~ ., family = binomial(link="logit"), data = d)
+summary(mdl)
+```
+
+
+```{r}
+y_predict <- predict(mdl, d, type="response")
+
+range(y_predict)
+```
+
+Excellent, our response is now constrained between 0 and 1. Next, let's look at the term plots to see the relationship between predictor and response.
+
+```{r termplots glm}
+# show term plots
+termplot(mdl, partial.resid = TRUE, se = TRUE, main = F, ylim="free")
+```
+
+### Generalized Additive Model
+
+With a generalized additive model we can add "wiggle" to the relationship between predictor and response by introducing smooth `s()` terms.
+
+```{r}
+librarian::shelf(mgcv)
+
+# fit a generalized additive model with smooth predictors
+mdl <- mgcv::gam(
+  formula = present ~ s(WC_alt) + s(WC_bio1) + 
+    s(WC_bio2) + s(WC_bio4) + s(WC_tmean1) + s(ER_tri) + s(ER_topoWet) + s(lon) + s(lat), 
+  family = binomial, data = d)
+summary(mdl)
+```
+
+
+```{r}
+# show term plots
+plot(mdl, scale=0)
+```
+- **Question**: Which GAM environmental variables, and even range of values, seem to contribute most towards presence (above 0 response) versus absence (below 0 response)?
+  - Presence:
+    - "WC_tmean1" (Mean temperature (January)): Possibly for >0 and <-30 degrees but it seems to have a wide variance (dotted lines are not close)
+    - Longitude: Possibly from -150 > -120 but it does not seem strong
+    - "WC_bio4" (Temperature seasonality): Possibly between 70-110
+  - Absence:
+    - "WC_bio1" (Annual mean temperature): >10 degrees
+    - "WC_bio4" (Temperature seasonality): <70 and >110 
+    - Longitude: Possibly from < -150 but it does not seem strong
+
+  Overall it seems like there are more variables that are better predictors for absence rather than presence but that could just be from my inexperience to read these charts.
+
+### Maxent (Maximum Entropy)
+
+Maxent is probably the most commonly used species distribution model ([Elith 2011](http://dx.doi.org/10.1111/j.1472-4642.2010.00725.x)) since it performs well with few input data points, only requires presence points (and samples background for comparison) and is easy to use with a Java graphical user interface (GUI).
+
+```{r, echo=TRUE}
+# load extra packages
+librarian::shelf(
+  maptools, sf)
+
+mdl_maxent_rds <- file.path(dir_data, "mdl_maxent.rds")
+
+# show version of maxent
+if (!interactive())
+  maxent()
+```
+
+
+```{r, echo=TRUE}
+# get environmental rasters
+# NOTE: the first part of Lab 1. SDM - Explore got updated to write this clipped environmental raster stack
+env_stack_grd <- file.path(dir_data, "env_stack.grd")
+env_stack <- stack(env_stack_grd)
+plot(env_stack, nc=2)
+```
+
+```{r, echo=TRUE}
+# get presence-only observation points (maxent extracts raster values for you)
+obs_geo <- file.path(dir_data, "obs.geojson")
+obs_sp <- read_sf(obs_geo) %>% 
+  sf::as_Spatial() # maxent prefers sp::SpatialPoints over newer sf::sf class
+```
+
+
+```{r, echo=TRUE}
+# fit a maximum entropy model
+if (!file.exists(mdl_maxent_rds)){
+  mdl <- maxent(env_stack, obs_sp)
+  readr::write_rds(mdl, mdl_maxent_rds)
+}
+mdl <- read_rds(mdl_maxent_rds)
+```
+
+
+```{r, echo=TRUE}
+# plot variable contributions per predictor
+plot(mdl)
+```
+
+
+```{r, echo=TRUE}
+# plot term plots
+response(mdl)
+```
+- **Question**: Which Maxent environmental variables, and even range of values, seem to contribute most towards presence (closer to 1 response) and how might this differ from the GAM results?
+  - "WC_bio1": Temps < -5 degrees
+  - "WC_tmean1": Temps > 10 degrees
+  - "ER_tri": Values > 300
+  - "ER_topoWet": Values < 0
+  The Maxent environmental variables add WC_bio1, ER_tri, and ER_topoWet to presence compared to the GAM results and takes away the WC_bio4.
+
+```{r, echo=TRUE}
+# predict
+y_predict <- predict(env_stack, mdl) #, ext=ext, progress='')
+
+plot(y_predict, main='Maxent, raw prediction')
+data(wrld_simpl, package="maptools")
+plot(wrld_simpl, add=TRUE, border='dark grey')
+```
+
+# Lab 1c
+
+## Setup
+
+```{r}
+# global knitr chunk options
+knitr::opts_chunk$set(
+  warning = FALSE, 
+  message = FALSE)
+
+# load packages
+librarian::shelf(
+  caret,       # m: modeling framework
+  dplyr, ggplot2 ,here, readr, 
+  pdp,         # X: partial dependence plots
+  ranger,      # m: random forest modeling
+  rpart,       # m: recursive partition modeling
+  rpart.plot,  # m: recursive partition plotting
+  rsample,     # d: split train/test data
+  skimr,       # d: skim summarize data table
+  vip)         # X: variable importance
+```
+
+
+```{r}
+# options
+options(
+  scipen = 999,
+  readr.show_col_types = F)
+set.seed(42)
+
+# graphical theme
+ggplot2::theme_set(ggplot2::theme_light())
+
+# paths
+dir_data    <- here("data/sdm")
+pts_env_csv <- file.path(dir_data, "pts_env.csv")
+
+# read data
+pts_env <- read_csv(pts_env_csv)
+d <- pts_env %>% 
+  select(-ID) %>%                   # not used as a predictor x
+  mutate(
+    present = factor(present)) %>%  # categorical response
+  na.omit()                         # drop rows with NA
+skim(d)
+```
+
+### Split data into training and testing
+
+```{r, echo=TRUE}
+# create training set with 80% of full data
+d_split  <- rsample::initial_split(d, prop = 0.8, strata = "present")
+d_train  <- rsample::training(d_split)
+
+# show number of rows present is 0 vs 1
+table(d$present)
+table(d_train$present)
+```
+
+## Decision Trees
+
+### Partition, depth=1
+```{r rpart-stump, echo=TRUE, fig.width=4, fig.height=3, fig.show='hold', fig.cap="Decision tree illustrating the single split on feature x (left).", out.width="48%"}
+# run decision stump model
+mdl <- rpart(
+  present ~ ., data = d_train, 
+  control = list(
+    cp = 0, minbucket = 5, maxdepth = 1))
+mdl
+
+# plot tree 
+par(mar = c(1, 1, 1, 1))
+rpart.plot(mdl)
+```
+
+### Partition, depth=default
+
+```{r rpart-default, echo=TRUE, fig.width=4, fig.height=3, fig.show='hold', fig.cap="Decision tree $present$ classification.", out.width="48%"}
+# decision tree with defaults
+mdl <- rpart(present ~ ., data = d_train)
+mdl
+rpart.plot(mdl)
+
+# plot complexity parameter
+plotcp(mdl)
+
+# rpart cross validation results
+mdl$cptable
+```
+**Question**: Based on the complexity plot threshold, what size of tree is recommended?
+I believe it is recommending a tree of size 9.
+
+### Feature interpretation
+
+```{r cp-table, fig.cap="Cross-validated accuracy rate for the 20 different $\\alpha$ parameter values in our grid search. Lower $\\alpha$ values (deeper trees) help to minimize errors.", fig.height=3}
+
+# caret cross validation results
+mdl_caret <- train(
+  present ~ .,
+  data       = d_train,
+  method     = "rpart",
+  trControl  = trainControl(method = "cv", number = 10),
+  tuneLength = 20)
+
+ggplot(mdl_caret)
+```
+
+```{r dt-vip, fig.height=5.5, fig.cap="Variable importance based on the total reduction in MSE for the Ames Housing decision tree."}
+vip(mdl_caret, num_features = 40, bar = FALSE)
+```
+**Question**: what are the top 3 most important variables of your model?
+Latitude, WC_alt, and longitude
+
+```{r dt-pdp, fig.width=10, fig.height= 3.5, fig.cap="Partial dependence plots to understand the relationship between lat, WC_alt and present."}
+# Construct partial dependence plots
+p1 <- partial(mdl_caret, pred.var = "lat") %>% autoplot()
+p2 <- partial(mdl_caret, pred.var = "WC_alt") %>% autoplot()
+p3 <- partial(mdl_caret, pred.var = c("lat", "WC_alt")) %>% 
+  plotPartial(levelplot = FALSE, zlab = "yhat", drape = TRUE, 
+              colorkey = TRUE, screen = list(z = -20, x = -60))
+
+# Display plots side by side
+gridExtra::grid.arrange(p1, p2, p3, ncol = 3)
+```
+
+## Random Forests
+
+### Fit
+
+```{r out-of-box-rf}
+# number of features
+n_features <- length(setdiff(names(d_train), "present"))
+
+# fit a default random forest model
+mdl_rf <- ranger(present ~ ., data = d_train)
+
+# get out of the box RMSE
+(default_rmse <- sqrt(mdl_rf$prediction.error))
+```
+
+### Feature interpretation
+
+```{r feature-importance}
+# re-run model with impurity-based variable importance
+mdl_impurity <- ranger(
+  present ~ ., data = d_train,
+  importance = "impurity")
+
+# re-run model with permutation-based variable importance
+mdl_permutation <- ranger(
+  present ~ ., data = d_train,
+  importance = "permutation")
+```
+
+```{r feature-importance-plot, fig.cap="Most important variables based on impurity (left) and permutation (right).", fig.height=4.5, fig.width=10}
+p1 <- vip::vip(mdl_impurity, bar = FALSE)
+p2 <- vip::vip(mdl_permutation, bar = FALSE)
+
+gridExtra::grid.arrange(p1, p2, nrow = 1)
+```
+**Question**: How might variable importance differ between rpart and RandomForest in your model outputs?
+Based on the permutation model the most important variables are latitude, WC_alt, and longitude. This is the same as the RandomForest outputs. The scale on the bottom is different but I am not sure why.
+
+# Lab 1d
+
+## Learning Objectives {.unnumbered}
+
+Now you'll complete the modeling workflow with the steps to **evaluate** model performance and **calibrate** model parameters.
+
+```{r fig.cap="Full model workflow with calibrate and evaluate steps emphasized.", echo=F}
+# [model-workflow_evaluate-calibrate - Google Drawings](https://docs.google.com/drawings/d/10hr0L_Iu_2DleLHzQmQWJGocG87yRbSX8jHne7fiZr0/edit)
+knitr::include_graphics("https://docs.google.com/drawings/d/e/2PACX-1vSO_TOz2eZ_qmdIrsrXS1If82bUv1Sno1U5bJ2y8GD7S1PhrrSYMeKCxKy6GtSZp6NC01tBZfUnXPdD/pub?w=933&h=354")
+```
+
+## Setup
+
+```{r}
+# load packages
+librarian::shelf(
+  dismo, # species distribution modeling: maxent(), predict(), evaluate(), 
+  dplyr, ggplot2, GGally, here, maptools, readr, 
+  raster, readr, rsample, sf,
+  usdm)  # uncertainty analysis for species distribution models: vifcor()
+select = dplyr::select
+
+# options
+set.seed(42)
+options(
+  scipen = 999,
+  readr.show_col_types = F)
+ggplot2::theme_set(ggplot2::theme_light())
+```
+
+
+```{r}
+# paths
+dir_data      <- here("data/sdm")
+pts_geo       <- file.path(dir_data, "pts.geojson")
+env_stack_grd <- file.path(dir_data, "env_stack.grd")
+mdl_maxv_rds  <- file.path(dir_data, "mdl_maxent_vif.rds")
+
+# read points of observation: presence (1) and absence (0)
+pts <- read_sf(pts_geo)
+
+# read raster stack of environment
+env_stack <- raster::stack(env_stack_grd)
+```
+
+### Split observations into training and testing
+
+```{r, echo=TRUE}
+# create training set with 80% of full data
+pts_split  <- rsample::initial_split(
+  pts, prop = 0.8, strata = "present")
+pts_train  <- rsample::training(pts_split)
+pts_test   <- rsample::testing(pts_split)
+
+pts_train_p <- pts_train %>% 
+  filter(present == 1) %>% 
+  as_Spatial()
+pts_train_a <- pts_train %>% 
+  filter(present == 0) %>% 
+  as_Spatial()
+```
+
+## Calibrate: Model Selection
+
+```{r}
+# show pairs plot before multicollinearity reduction with vifcor()
+pairs(env_stack)
+```
+
+```{r}
+# calculate variance inflation factor per predictor, a metric of multicollinearity between variables
+vif(env_stack)
+```
+
+
+```{r}
+# stepwise reduce predictors, based on a max correlation of 0.7 (max 1)
+v <- vifcor(env_stack, th=0.7) 
+v
+```
+
+
+```{r}
+# reduce enviromental raster stack by 
+env_stack_v <- usdm::exclude(env_stack, v)
+
+# show pairs plot after multicollinearity reduction with vifcor()
+pairs(env_stack_v)
+```
+
+```{r}
+# fit a maximum entropy model
+if (!file.exists(mdl_maxv_rds)){
+  mdl_maxv <- maxent(env_stack_v, sf::as_Spatial(pts_train))
+  readr::write_rds(mdl_maxv, mdl_maxv_rds)
+}
+mdl_maxv <- read_rds(mdl_maxv_rds)
+```
+
+
+```{r}
+# plot variable contributions per predictor
+plot(mdl_maxv)
+```
+**Question**: Which variables were removed due to multicollinearity and what is the rank of most to least important remaining variables in your model?
+
+WC_bio1, WC_tmean1, and ER_tri were removed for multicollinearity. Rankings of remaining variables are below.
+- ER_topoWet
+- WC_bio4
+- WC_alt
+- WC_bio2
+
+```{r}
+# plot term plots
+response(mdl_maxv)
+```
+
+
+```{r}
+# predict
+y_maxv <- predict(env_stack, mdl_maxv) #, ext=ext, progress='')
+
+plot(y_maxv, main='Maxent, raw prediction')
+data(wrld_simpl, package="maptools")
+plot(wrld_simpl, add=TRUE, border='dark grey')
+```
+
+## Evaluate: Model Performance
+
+### Area Under the Curve (AUC), Reciever Operater Characteristic (ROC) Curve and Confusion Matrix
+
+```{r}
+pts_test_p <- pts_test %>% 
+  filter(present == 1) %>% 
+  as_Spatial()
+pts_test_a <- pts_test %>% 
+  filter(present == 0) %>% 
+  as_Spatial()
+
+y_maxv <- predict(mdl_maxv, env_stack)
+#plot(y_maxv)
+
+e <- dismo::evaluate(
+  p     = pts_test_p,
+  a     = pts_test_a, 
+  model = mdl_maxv,
+  x     = env_stack)
+e
+```
+
+
+```{r}
+plot(e, 'ROC')
+
+thr <- threshold(e)[['spec_sens']]
+thr
+
+p_true <- na.omit(raster::extract(y_maxv, pts_test_p) >= thr)
+a_true <- na.omit(raster::extract(y_maxv, pts_test_a) < thr)
+
+# (t)rue/(f)alse (p)ositive/(n)egative rates
+tpr <- sum(p_true)/length(p_true)
+fnr <- sum(!p_true)/length(p_true)
+fpr <- sum(!a_true)/length(a_true)
+tnr <- sum(a_true)/length(a_true)
+
+matrix(
+  c(tpr, fnr,
+    fpr, tnr), 
+  nrow=2, dimnames = list(
+    c("present_obs", "absent_obs"),
+    c("present_pred", "absent_pred")))
+
+# add point to ROC plot
+points(fpr, tpr, pch=23, bg="blue")
+
+plot(y_maxv > thr)
+```
+

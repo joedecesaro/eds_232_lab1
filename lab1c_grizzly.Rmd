@@ -169,3 +169,4 @@ p2 <- vip::vip(mdl_permutation, bar = FALSE)
 gridExtra::grid.arrange(p1, p2, nrow = 1)
 ```
 **Question**: How might variable importance differ between rpart and RandomForest in your model outputs?
+Based on the permutation model the most important variables are latitude, WC_alt, and longitude. This is the same as the RandomForest outputs. The scale on the bottom is different but I am not sure why.

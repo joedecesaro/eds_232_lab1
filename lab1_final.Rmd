@@ -38,8 +38,7 @@ dir.create(dir_data, showWarnings = F, recursive = T)
 
 ### Choose a Species
 Ursus arctos horribilis - Grizzly Bear
-
-![](~/EDS232/eds_232_lab1/01407315.jpg)
+![](bear.png)
 
 ### Get Species Observations
 
